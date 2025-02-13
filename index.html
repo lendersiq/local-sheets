@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Local Sheets</title>
+  <link rel="stylesheet" href="styles/base.css">
+</head>
+<body>
+  <!-- Navigation Bar with File Menu -->
+  <nav>
+    <div class="menu">
+      <button class="menu-button" id="fileMenuButton">File</button>
+      <div class="dropdown" id="fileDropdown">
+        <button class="dropdown-item" id="openSheetButton">Open Sheet</button>
+        <button class="dropdown-item" id="openSourcesButton">Open Sources</button>
+      </div>
+    </div>
+  </nav>
+
+  <header>
+    <h1>Local Sheets</h1>
+  </header>
+  
+  <main>
+    <div id="errorDisplay"></div>
+    <table id="spreadsheet"></table>
+  </main>
+
+  <!-- Hidden file inputs for sheet configuration and CSV sources -->
+  <input type="file" id="sheetConfigInput" accept=".json" style="display: none;">
+  <input type="file" id="fileInput" accept=".csv" style="display: none;">
+
+  <!-- Include the functions library -->
+  <script src="libraries/functions.js"></script>
+  <!-- Include the main sheets JavaScript -->
+  <script src="js/sheets.js"></script>
+</body>
+</html>
