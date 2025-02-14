@@ -9,10 +9,18 @@
   <!-- Navigation Bar with File Menu -->
   <nav>
     <div class="menu">
-      <button class="menu-button" id="fileMenuButton">File</button>
+      <!-- New Option with Icon -->
+      <button class="menu-button" id="newSheetButton">
+        <span class="icon">🆕</span> New
+      </button>
+      <button class="menu-button" id="fileMenuButton">
+        <span class="icon">📂</span> File
+      </button>
       <div class="dropdown" id="fileDropdown">
-        <button class="dropdown-item" id="openSheetButton">Open Sheet</button>
-        <!-- The following buttons will be added dynamically for each CSV source -->
+        <button class="dropdown-item" id="openSheetButton">
+          <span class="icon">📄</span> Open Sheet
+        </button>
+        <!-- Dynamically created CSV source buttons go here -->
       </div>
     </div>
   </nav>
@@ -28,8 +36,26 @@
 
   <!-- Hidden file input for sheet configuration -->
   <input type="file" id="sheetConfigInput" accept=".json" style="display: none;">
-  
-  <!-- The CSV file inputs for each source are created dynamically -->
+  <!-- CSV file inputs for each source will be created dynamically -->
+
+  <!-- Modal for creating a new sheet -->
+  <div id="newSheetModal" class="modal">
+    <div class="modal-content">
+      <span class="close-button" id="closeModal">&times;</span>
+      <h2>Create New Sheet</h2>
+      <div id="newSheetForm">
+        <!-- The new sheet form will contain a list of column editors -->
+        <div id="columnsContainer">
+          <!-- One column row is added by default -->
+        </div>
+        <button id="addColumnButton">Add Column</button>
+        <div class="modal-footer">
+          <input type="text" id="newSheetName" placeholder="Sheet Name" />
+          <button id="saveNewSheetButton">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Include the functions library -->
   <script src="libraries/functions.js"></script>
