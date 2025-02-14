@@ -464,3 +464,143 @@ function renderSheet() {
     });
   });
 }
+
+// Updated default columnsConfig can remain as is or be overwritten by a loaded/new sheet.
+
+// -------------
+// NEW SHEET MODAL LOGIC
+// -------------
+const newSheetButton = document.getElementById('newSheetButton');
+const newSheetModal = document.getElementById('newSheetModal');
+const closeModal = document.getElementById('closeModal');
+const addColumnButton = document.getElementById('addColumnButton');
+const columnsContainer = document.getElementById('columnsContainer');
+const saveNewSheetButton = document.getElementById('saveNewSheetButton');
+const newSheetNameInput = document.getElementById('newSheetName');
+
+// Example: list of functions from functions.js (keys from window.functions)
+const availableFunctions = window.functions ? Object.keys(window.functions) : [];
+
+// Utility to create a new column editor row.
+function createColumnEditor(initialData = {}) {
+  const row = document.createElement('div');
+  row.className = 'column-editor';
+  // Heading input (enabled only on first row initially; can be edited later)
+  row.innerHTML = `
+    <div class="column-row">
+      <input type="text" class="col-heading" placeholder="Heading" value="${initialData.heading || ''}" />
+      <select class="col-type">
+        <option value="data" ${initialData.column_type==='data'?'selected':''}>Data</option>
+        <option value="function" ${initialData.column_type==='function'?'selected':''}>Function</option>
+        <option value="formula" ${initialData.column_type==='formula'?'selected':''}>Formula</option>
+      </select>
+      <select class="data-type">
+        <option value="unique">Unique (e.g., ID)</option>
+        <option value="currency">Currency (e.g., $123.45)</option>
+        <option value="rate">Rate (e.g., 5.00%)</option>
+        <option value="float">Float (e.g., 12.34)</option>
+        <option value="integer">Integer (e.g., 123)</option>
+        <option value="strings">String</option>
+      </select>
+      <span class="icon move-left" title="Move Left">&#9664;</span>
+      <span class="icon move-right" title="Move Right">&#9654;</span>
+      <span class="icon remove" title="Remove Column">&#10006;</span>
+    </div>
+    <div class="column-extra">
+      <!-- Extra fields appear based on column type -->
+      <div class="data-options" style="display:none;">
+        <input type="text" class="source-name" placeholder="Source Name" value="${initialData.source_name || ''}" />
+        <input type="text" class="csv-id" placeholder="CSV Header ID" value="${initialData.id || ''}" />
+      </div>
+      <div class="function-options" style="display:none;">
+        <div contenteditable="true" class="function-input" placeholder="Enter function e.g., interestIncome(principal, rate)">${initialData.function || ''}</div>
+        <div class="function-hint">Available functions: ${availableFunctions.join(', ')}</div>
+      </div>
+      <div class="formula-options" style="display:none;">
+        <div contenteditable="true" class="formula-input" placeholder="Enter formula e.g., interestIncome * 0.1">${initialData.formula || ''}</div>
+      </div>
+    </div>
+  `;
+  // Show/hide extra fields based on column type selection.
+  const colTypeSelect = row.querySelector('.col-type');
+  function updateExtraFields() {
+    const type = colTypeSelect.value;
+    row.querySelector('.data-options').style.display = (type === 'data') ? 'block' : 'none';
+    row.querySelector('.function-options').style.display = (type === 'function') ? 'block' : 'none';
+    row.querySelector('.formula-options').style.display = (type === 'formula') ? 'block' : 'none';
+  }
+  colTypeSelect.addEventListener('change', updateExtraFields);
+  updateExtraFields();
+
+  // Remove column event.
+  row.querySelector('.remove').addEventListener('click', () => {
+    row.remove();
+  });
+  // Move left/right events.
+  row.querySelector('.move-left').addEventListener('click', () => {
+    if (row.previousElementSibling) {
+      columnsContainer.insertBefore(row, row.previousElementSibling);
+    }
+  });
+  row.querySelector('.move-right').addEventListener('click', () => {
+    if (row.nextElementSibling) {
+      columnsContainer.insertBefore(row.nextElementSibling, row);
+    }
+  });
+  return row;
+}
+
+// When user clicks "New", display the modal.
+newSheetButton.addEventListener('click', () => {
+  newSheetModal.style.display = 'block';
+  // Clear previous content.
+  columnsContainer.innerHTML = '';
+  // Create one default column editor row.
+  columnsContainer.appendChild(createColumnEditor());
+});
+
+// Close modal when the close button is clicked.
+closeModal.addEventListener('click', () => {
+  newSheetModal.style.display = 'none';
+});
+
+// Add column button.
+addColumnButton.addEventListener('click', () => {
+  columnsContainer.appendChild(createColumnEditor());
+});
+
+// When user clicks "Save", build the new columnsConfig JSON.
+saveNewSheetButton.addEventListener('click', () => {
+  const newColumns = [];
+  const editors = columnsContainer.querySelectorAll('.column-editor');
+  editors.forEach(editor => {
+    const heading = editor.querySelector('.col-heading').value.trim();
+    const column_type = editor.querySelector('.col-type').value;
+    const data_type = editor.querySelector('.data-type').value;
+    let col = { heading, column_type, data_type };
+    // Always assign an id. For simplicity, convert heading to lowercase without spaces.
+    col.id = heading.toLowerCase().replace(/\s+/g, '');
+    if (column_type === 'data') {
+      col.source_name = editor.querySelector('.source-name').value.trim();
+      col.id = editor.querySelector('.csv-id').value.trim() || col.id;
+    } else if (column_type === 'function') {
+      col.function = editor.querySelector('.function-input').innerText.trim();
+    } else if (column_type === 'formula') {
+      col.formula = editor.querySelector('.formula-input').innerText.trim();
+    }
+    newColumns.push(col);
+  });
+  // Get the new sheet name.
+  const sheetName = newSheetNameInput.value.trim() || "NewSheet";
+  // Build the new configuration.
+  const newConfig = {
+    sheetName: sheetName,
+    columnsConfig: newColumns
+  };
+  console.log("New sheet configuration:", newConfig);
+  // Here you could save the JSON to a file or localStorage.
+  // For demonstration, we update the global columnsConfig and close the modal.
+  columnsConfig = newConfig.columnsConfig;
+  newSheetModal.style.display = 'none';
+  alert('New sheet configuration saved. You can now load CSV sources.');
+});
