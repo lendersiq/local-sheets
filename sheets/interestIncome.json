@@ -1,0 +1,10 @@
+{
+  "columnsConfig": [
+    { "heading": "Portfolio", "id": "portfolio", "column_type": "data", "data_type": "unique", "source_name": "loan" },
+    { "heading": "Principal", "id": "principal", "column_type": "data", "data_type": "currency", "source_name": "loan"  },
+    { "heading": "Rate", "id": "rate", "column_type": "data", "data_type": "rate", "source_name": "loan" },
+    { "heading": "Balance", "id": "Average_Balance", "column_type": "data", "data_type": "currency", "source_name": "checking" },
+    { "heading": "Interest Income", "id": "interestIncome", "column_type": "function", "function": "interestIncome(principal, rate)", "data_type": "currency" },
+    { "heading": "Commission", "id": "commission", "column_type": "formula", "formula": "interestIncome * 0.1", "data_type": "currency" }
+  ]
+}
