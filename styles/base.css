@@ -126,3 +126,94 @@ main {
 input[type="file"] {
   display: none;
 }
+
+/* Icon styling */
+.icon {
+  margin-right: 5px;
+}
+
+/* Modal styling */
+.modal {
+  display: none; /* Hidden by default */
+  position: fixed;
+  z-index: 2000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0,0,0,0.5);
+}
+.modal-content {
+  background-color: #fefefe;
+  margin: 10% auto;
+  padding: 20px;
+  border: 1px solid #888;
+  width: 80%;
+  max-width: 600px;
+  border-radius: 5px;
+  position: relative;
+}
+.close-button {
+  color: #aaa;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+}
+.close-button:hover {
+  color: #000;
+}
+#newSheetForm {
+  margin-top: 20px;
+}
+.column-editor {
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.column-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.column-row input.col-heading {
+  flex: 2;
+}
+.column-row select {
+  flex: 1;
+}
+.column-row .icon {
+  cursor: pointer;
+}
+.column-extra {
+  margin-top: 10px;
+}
+.column-extra > div {
+  margin-bottom: 5px;
+}
+.column-extra input,
+.column-extra .function-input,
+.column-extra .formula-input {
+  width: 100%;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+.function-input, .formula-input {
+  min-height: 30px;
+}
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+.modal-footer input {
+  flex: 2;
+  margin-right: 10px;
+}
+.modal-footer button {
+  flex: 1;
+}
+
