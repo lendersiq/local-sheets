@@ -1,57 +1,87 @@
 // js/sheets.js
 
-// Updated default columns configuration with source_name for data columns.
+//
+// 1. Updated default columnsConfig with date columns and formula
+//
 let columnsConfig = [
-  { heading: 'Portfolio', id: 'portfolio', column_type: 'data', data_type: 'unique', source_name: 'loan' },
+  { heading: 'Portfolio', id: 'portfolio', column_type: 'data', data_type: 'unique',   source_name: 'loan' },
   { heading: 'Principal', id: 'principal', column_type: 'data', data_type: 'currency', source_name: 'loan' },
-  { heading: 'Rate', id: 'rate', column_type: 'data', data_type: 'rate', source_name: 'loan' },
-  { heading: 'Balance', id: 'Average_Balance', column_type: 'data', data_type: 'currency', source_name: 'checking' },
-  { heading: 'Interest Income', id: 'interestIncome', column_type: 'function', function: 'interestIncome(principal, rate)', data_type: 'currency' },
-  { heading: 'Commission', id: 'commission', column_type: 'formula', formula: 'interestIncome * 0.1', data_type: 'currency' }
+  { heading: 'Payment',   id: 'Last_Payment',   column_type: 'data', data_type: 'currency', source_name: 'loan' },
+  { heading: 'Maturity',  id: 'maturity_date',  column_type: 'data', data_type: 'date',     source_name: 'loan' },
+  { heading: 'Rate',      id: 'rate',           column_type: 'data', data_type: 'rate',     source_name: 'loan' },
+  { heading: 'Balance',   id: 'average_balance', column_type: 'data', data_type: 'currency', source_name: 'checking' },
+  { heading: 'Average',   id: 'averageBalance', column_type: 'function', function: 'averageBalance(principal, Last_Payment, rate, maturity_date)', data_type: 'currency' },
+  { heading: 'Commission',id: 'commission',     column_type: 'formula',  formula: 'averageBalance * 0.1', data_type: 'currency' }
 ];
 
-// Global sheetData holds all rows (from all CSV files)
+// Global storage for CSV data
 let sheetData = [];
 
-// Currency formatter.
+// ----------------------------------------------------------------------
+// 2. Format values (currency, rate, etc.)
+// ----------------------------------------------------------------------
 const USDollar = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
+  style: 'currency',
+  currency: 'USD',
 });
 
-// Helper for formatting cell values based on data_type.
 function formatValue(value, dataType) {
   if (value == null || value === '') return '';
-  switch(dataType) {
+  switch (dataType) {
     case 'currency':
       return USDollar.format(value);
     case 'rate':
-      // Assume value is in decimal (e.g., 0.05 => 5.00%)
+      // Assume value is decimal => 0.05 => 5.00%
       return (parseFloat(value) * 100).toFixed(2) + '%';
     case 'integer':
       return parseInt(value);
     case 'float':
       return parseFloat(value).toFixed(2);
     default:
+      // date or strings or anything else
       return value;
   }
 }
 
-/* ---------------------------
-   Safe Formula Evaluation
----------------------------- */
-function safeEvalFormula(formulaStr) {
-  // Allow only numbers, operators, whitespace, decimal points, and parentheses.
-  if (/^[0-9+\-*/().\s]+$/.test(formulaStr)) {
-    return Function('"use strict"; return (' + formulaStr + ')')();
-  } else {
-    throw new Error("Unsafe characters detected in formula: " + formulaStr);
+// ----------------------------------------------------------------------
+// 3. Safe formula evaluation
+// ----------------------------------------------------------------------
+function safeEvalFormula(formulaStr, expectedType) {
+  // 1. Replace DATE(...) tokens with day counts.
+  let transformed = formulaStr.replace(/DATE\((.*?)\)/g, (match, p1) => {
+    if (p1 === 'Invalid') return 'NaN';
+    const dt = new Date(p1.trim());
+    if (isNaN(dt.getTime())) return 'NaN';
+    const daysSinceEpoch = Math.floor(dt.getTime() / (1000 * 3600 * 24));
+    return String(daysSinceEpoch);
+  });
+
+  // 2. Safety check
+  if (!/^[0-9+\-*/().\s]+$/.test(transformed)) {
+    throw new Error("Unsafe characters detected in formula: " + transformed);
   }
+
+  // 3. Evaluate
+  let numericVal = Function('"use strict"; return (' + transformed + ')')();
+
+  // 4. If we’re expecting a date, interpret numericVal as day offset (if it’s valid).
+  if (expectedType === 'date' && typeof numericVal === 'number' && !isNaN(numericVal)) {
+    // If numericVal is negative or extremely small, maybe it’s pre-1970 or invalid. Up to you.
+    const dateCandidate = new Date(numericVal * 24 * 3600 * 1000);
+    if (!isNaN(dateCandidate.getTime())) {
+      // Return "YYYY-MM-DD"
+      return dateCandidate.toISOString().slice(0,10);
+    }
+    // If invalid, or below threshold, you could throw or just return numericVal
+  }
+
+  // Otherwise (not a date type), just return numericVal
+  return numericVal;
 }
 
-/* ---------------------------
-   Navigation Menu Logic
----------------------------- */
+// ----------------------------------------------------------------------
+// 4. Navigation Menu: File dropdown
+// ----------------------------------------------------------------------
 document.getElementById('fileMenuButton').addEventListener('click', () => {
   document.getElementById('fileDropdown').classList.toggle('show');
 });
@@ -61,9 +91,9 @@ window.addEventListener('click', (e) => {
   }
 });
 
-/* ---------------------------
-   Open Sheet (Configuration)
----------------------------- */
+// ----------------------------------------------------------------------
+// 5. Open an existing sheet config
+// ----------------------------------------------------------------------
 document.getElementById('openSheetButton').addEventListener('click', () => {
   document.getElementById('sheetConfigInput').click();
 });
@@ -71,7 +101,7 @@ document.getElementById('sheetConfigInput').addEventListener('change', (event) =
   const file = event.target.files[0];
   if (file) {
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = (e) => {
       try {
         const config = JSON.parse(e.target.result);
         if (config.columnsConfig) {
@@ -79,7 +109,7 @@ document.getElementById('sheetConfigInput').addEventListener('change', (event) =
           sheetData = [];
           renderSheet();
           alert('Sheet configuration loaded. Now open CSV sources.');
-          // Rebuild the CSV file menu buttons.
+          // Rebuild CSV file inputs
           setupSourceFileInputs();
         } else {
           alert('Invalid sheet configuration file.');
@@ -92,26 +122,22 @@ document.getElementById('sheetConfigInput').addEventListener('change', (event) =
   }
 });
 
-/* ---------------------------
-   Multiple CSV Sources
----------------------------- */
-// Build file input buttons for each distinct source_name.
+// ----------------------------------------------------------------------
+// 6. Multiple CSV sources. Build file input for each source_name
+// ----------------------------------------------------------------------
 let sourceFileInputs = {};
-
-// Global counter for pending CSV file reads.
 let pendingFileReads = 0;
 
-// Updated file input change handler for each CSV source.
 function setupSourceFileInputs() {
-  // Remove any existing source buttons.
+  // Clear out existing
   const dropdown = document.getElementById('fileDropdown');
-  // Remove all items except the first "Open Sheet" button.
   dropdown.querySelectorAll('.source-button').forEach(el => el.remove());
   sourceFileInputs = {};
-  // Get distinct source names from data columns.
+
+  // Identify distinct sources from columnsConfig
   const sourceNames = [...new Set(columnsConfig.filter(c => c.column_type === 'data').map(c => c.source_name))];
   sourceNames.forEach(source => {
-    // Create a menu button.
+    // Create a dropdown button
     const btn = document.createElement('button');
     btn.className = 'dropdown-item source-button';
     btn.textContent = 'Open ' + source + ' CSV';
@@ -121,7 +147,7 @@ function setupSourceFileInputs() {
     });
     dropdown.appendChild(btn);
 
-    // Create a hidden file input for this source.
+    // Create hidden file input
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.csv';
@@ -131,14 +157,12 @@ function setupSourceFileInputs() {
     input.addEventListener('change', (event) => {
       const files = event.target.files;
       for (let file of files) {
-        pendingFileReads++;  // Increase pending count
+        pendingFileReads++;
         const reader = new FileReader();
         reader.onload = (e) => {
-          // Parse CSV for this source.
           parseCSVForSource(e.target.result, source);
-          pendingFileReads--;  // File read finished
+          pendingFileReads--;
           if (pendingFileReads === 0) {
-            // Once all files are loaded, process mapping, recalculation, and rendering.
             processAllCSV();
           }
         };
@@ -150,23 +174,7 @@ function setupSourceFileInputs() {
   });
 }
 
-// Process all CSV files after all file reads have completed.
-function processAllCSV() {
-  // For each distinct source in the loaded data, map the CSV headers.
-  const sources = [...new Set(sheetData.map(row => row.__source))];
-  sources.forEach(source => {
-    mapColumnsForSource(source);
-  });
-  recalcSheet();
-  renderSheet();
-}
-
-// Initial call to set up file inputs (using default config).
-setupSourceFileInputs();
-
-/* ---------------------------
-   CSV Parsing for a Given Source
----------------------------- */
+// Load all CSV data for a given source, store in sheetData
 function parseCSVForSource(text, source) {
   const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
   if (!lines.length) return;
@@ -177,24 +185,28 @@ function parseCSVForSource(text, source) {
     headers.forEach((header, index) => {
       row[header] = values[index];
     });
-    // Tag the row with its source.
     row.__source = source;
     return row;
   });
   sheetData = sheetData.concat(newRows);
 }
 
-/* ---------------------------
-   Map CSV Headers to Columns (per Source)
----------------------------- */
-// For each data column, if the row's source matches the column's source_name, try to map the CSV header to col.id.
+// After all files loaded, map columns, recalc, render
+function processAllCSV() {
+  const sources = [...new Set(sheetData.map(r => r.__source))];
+  sources.forEach(s => mapColumnsForSource(s));
+  recalcSheet();
+  renderSheet();
+}
+
+// Map CSV headers to columns for a given source
 function mapColumnsForSource(source) {
   sheetData.forEach(row => {
     if (row.__source === source) {
       columnsConfig.forEach(col => {
         if (col.column_type === 'data' && col.source_name === source) {
           if (!(col.id in row)) {
-            // Try a case-insensitive match from CSV headers.
+            // Attempt a case-insensitive match
             for (let key in row) {
               if (key.toLowerCase() === col.id.toLowerCase()) {
                 row[col.id] = row[key];
@@ -211,28 +223,28 @@ function mapColumnsForSource(source) {
   });
 }
 
-/* ---------------------------
-   Evaluate Formulas
----------------------------- */
+// Initialize the file inputs from the default config
+setupSourceFileInputs();
+
+// ----------------------------------------------------------------------
+// 7. Evaluate columns: function first, formula second. Now with date logic
+// ----------------------------------------------------------------------
 function recalcSheet() {
   const errorDisplay = document.getElementById('errorDisplay');
   errorDisplay.innerHTML = '';
-
+  console.log('sheetData', sheetData)
+  // First pass: function columns
   sheetData.forEach((row, rowIndex) => {
-    // First pass: function columns.
     columnsConfig.forEach(col => {
       if (col.column_type === 'function' && col.function) {
         const match = col.function.match(/^(\w+)\(([^)]*)\)$/);
         if (match) {
           const funcName = match[1];
           const argsStr = match[2];
-          const args = argsStr.split(',')
-                              .map(arg => arg.trim())
-                              .map(arg => parseFloat(row[arg]) || 0);
+          const args = argsStr.split(',').map(arg => arg.trim()).map(arg => parseFloat(row[arg]) || 0);
           if (window.functions && window.functions[funcName]) {
             try {
-              const result = window.functions[funcName].implementation(...args);
-              row[col.id] = result;
+              row[col.id] = window.functions[funcName].implementation(...args);
             } catch (err) {
               row[col.id] = null;
               errorDisplay.innerHTML += `<div class="error">Row ${rowIndex + 1}, column "${col.heading}": ${err.message}</div>`;
@@ -244,165 +256,221 @@ function recalcSheet() {
         }
       }
     });
+  });
 
-    // Second pass: formula columns.
+  // Second pass: formula columns (with date-handling)
+  sheetData.forEach((row, rowIndex) => {
     columnsConfig.forEach(col => {
       if (col.column_type === 'formula' && col.formula) {
         let formulaStr = col.formula;
+        //let allRefsPresent = true;
         columnsConfig.forEach(refCol => {
           const regex = new RegExp('\\b' + refCol.id + '\\b', 'g');
-          formulaStr = formulaStr.replace(regex, row[refCol.id] !== undefined ? row[refCol.id] : 0);
+          let val = row[refCol.id];
+          
+          if (refCol.data_type === 'date') {
+            if (val) {
+              // Attempt to parse as date
+              const dt = parseDate(val);
+              if (dt) {
+                // e.g. Maturity_Date => "DATE(2037-09-28)"
+                val = `DATE(${dt.toISOString().substring(0,10)})`;
+              } else {
+                // Malformed date
+                //allRefsPresent = false;
+                val = 'DATE(Invalid)';
+              }
+            } else {
+              // If it's missing entirely, treat as invalid
+              //allRefsPresent = false;
+              //val = 'DATE(Invalid)';
+            }
+          } else {
+            // Non-date columns
+            if (val == null) {
+              // Missing numeric data => skip
+              //allRefsPresent = false;
+            } else {
+              val = parseFloat(val) || 0;
+            }
+          }
+          //if (allRefsPresent) {
+            formulaStr = formulaStr.replace(regex, val);
+          //}
         });
+
+        // If not all references are present, skip evaluating for now
+        //if (!allRefsPresent) {
+        //  console.log('formulaStr', formulaStr)
+        //  return;           
+        //}
+
         try {
-          const result = safeEvalFormula(formulaStr);
-          row[col.id] = result;
+          row[col.id] = safeEvalFormula(formulaStr, col.data_type);
         } catch (err) {
           row[col.id] = null;
-          errorDisplay.innerHTML += `<div class="error">Row ${rowIndex + 1}, column "${col.heading}": ${err.message}</div>`;
+          /*
+          errorDisplay.innerHTML += `<div class="error">
+            Row ${rowIndex + 1}, column "${col.heading}": ${err.message}
+          </div>`;
+          */
         }
       }
     });
   });
 }
 
-/* ---------------------------
-   Grouping & Accordion (Unique Column)
----------------------------- */
+// Convert date-like strings to Date objects
+function parseDate(val) {
+  if (val instanceof Date) return val;
+  const dt = new Date(val);
+  if (isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+// ----------------------------------------------------------------------
+// 8. Grouping for Unique Column + Accordion
+// ----------------------------------------------------------------------
 function getUniqueColumn() {
   return columnsConfig.find(col => col.data_type === 'unique' && col.column_type === 'data');
 }
 
 function groupRowsByUnique() {
   const uniqueCol = getUniqueColumn();
-  if (!uniqueCol) return sheetData.map(row => ({ combined: row, subRows: [] }));
+  if (!uniqueCol) {
+    return sheetData.map(r => ({ combined: r, subRows: [] }));
+  }
   const groups = {};
   sheetData.forEach(row => {
     const key = row[uniqueCol.id];
     if (!groups[key]) groups[key] = [];
     groups[key].push(row);
   });
-
-  const groupedRows = [];
+  const grouped = [];
   for (const key in groups) {
-    const rows = groups[key];
-    if (rows.length === 1) {
-      groupedRows.push({ combined: rows[0], subRows: [] });
+    const arr = groups[key];
+    if (arr.length === 1) {
+      grouped.push({ combined: arr[0], subRows: [] });
     } else {
-      const combined = combineRows(rows);
-      groupedRows.push({ combined, subRows: rows });
+      grouped.push({ combined: combineRows(arr), subRows: arr });
     }
   }
-  return groupedRows;
+  return grouped;
 }
 
+// Combine duplicates by summation, average, mode, etc.
 function combineRows(rows) {
   const combined = {};
   columnsConfig.forEach(col => {
-    let values = rows.map(row => row[col.id] || row[col.heading]);
-    switch(col.data_type) {
+    const vals = rows.map(r => r[col.id]);
+    switch (col.data_type) {
       case 'unique':
-        combined[col.id] = values[0];
+        combined[col.id] = vals[0];
         break;
       case 'currency':
       case 'float':
-        combined[col.id] = values.reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
-        break;
-      case 'integer':
-        const intValues = values.map(val => parseInt(val)).filter(v => !isNaN(v));
-        combined[col.id] = mode(intValues);
-        break;
-      case 'strings':
-        combined[col.id] = values.join(', ');
+        combined[col.id] = vals.reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
         break;
       case 'rate':
-        const nums = values.map(val => parseFloat(val)).filter(v => !isNaN(v));
-        combined[col.id] = nums.length ? (nums.reduce((a, b) => a + b, 0) / nums.length) : 0;
+        const nums = vals.map(v => parseFloat(v)).filter(x => !isNaN(x));
+        combined[col.id] = nums.length ? (nums.reduce((a,b) => a+b, 0) / nums.length) : 0;
+        break;
+      case 'integer':
+        const arr = vals.map(v => parseInt(v)).filter(x => !isNaN(x));
+        combined[col.id] = mode(arr);
+        break;
+      case 'strings':
+        combined[col.id] = vals.join(', ');
         break;
       default:
-        combined[col.id] = values[0];
+        combined[col.id] = vals[0];
     }
   });
   return combined;
 }
 
 function mode(arr) {
-  if (arr.length === 0) return null;
-  const frequency = {};
-  let maxFreq = 0;
-  let modeValue = arr[0];
-  arr.forEach(num => {
-    frequency[num] = (frequency[num] || 0) + 1;
-    if (frequency[num] > maxFreq) {
-      maxFreq = frequency[num];
-      modeValue = num;
+  if (!arr.length) return null;
+  const freq = {};
+  let maxCount=0, modeVal=null;
+  arr.forEach(x => {
+    freq[x] = (freq[x]||0) +1;
+    if (freq[x]>maxCount) {
+      maxCount=freq[x];
+      modeVal=x;
     }
   });
-  return modeValue;
+  return modeVal;
 }
 
-/* ---------------------------
-   Compute Totals Row
----------------------------- */
+// ----------------------------------------------------------------------
+// 9. Totals row
+// ----------------------------------------------------------------------
 function computeTotals() {
   const totals = {};
+  // Initialize
   columnsConfig.forEach(col => {
     switch(col.data_type) {
       case 'currency':
       case 'float':
         totals[col.id] = 0;
         break;
+      case 'rate':
+        totals[col.id] = { sum:0, count:0 };
+        break;
       case 'integer':
         totals[col.id] = [];
-        break;
-      case 'rate':
-        totals[col.id] = { sum: 0, count: 0 };
         break;
       default:
         totals[col.id] = '';
     }
   });
+  // Summation pass
   sheetData.forEach(row => {
     columnsConfig.forEach(col => {
-      let value = row[col.id] || row[col.heading];
+      let val = row[col.id];
       switch(col.data_type) {
         case 'currency':
         case 'float':
-          totals[col.id] += parseFloat(value) || 0;
-          break;
-        case 'integer':
-          const intVal = parseInt(value);
-          if (!isNaN(intVal)) totals[col.id].push(intVal);
+          totals[col.id]+= parseFloat(val) || 0;
           break;
         case 'rate':
-          const numVal = parseFloat(value);
-          if (!isNaN(numVal)) {
-            totals[col.id].sum += numVal;
+          const n = parseFloat(val);
+          if (!isNaN(n)) {
+            totals[col.id].sum+=n; 
             totals[col.id].count++;
           }
           break;
-        default:
+        case 'integer':
+          const i = parseInt(val);
+          if (!isNaN(i)) totals[col.id].push(i);
           break;
+        default:
+          // do nothing
       }
     });
   });
+  // Post-process
   columnsConfig.forEach(col => {
-    if (col.data_type === 'integer') {
+    if (col.data_type==='rate') {
+      totals[col.id] = (totals[col.id].count)
+        ? totals[col.id].sum / totals[col.id].count
+        : '';
+    } else if (col.data_type==='integer') {
       totals[col.id] = totals[col.id].length ? mode(totals[col.id]) : '';
-    } else if (col.data_type === 'rate') {
-      totals[col.id] = totals[col.id].count ? (totals[col.id].sum / totals[col.id].count) : '';
     }
   });
   return totals;
 }
 
-/* ---------------------------
-   Render the Spreadsheet (with Row Numbers & Formatting)
----------------------------- */
+// ----------------------------------------------------------------------
+// 10. Render Sheet
+// ----------------------------------------------------------------------
 function renderSheet() {
   const table = document.getElementById('spreadsheet');
   let html = '';
 
-  // Build header row with a new "Row" number column.
+  // Header with row numbers
   html += '<tr><th>Row</th>';
   columnsConfig.forEach(col => {
     html += `<th>${col.heading}</th>`;
@@ -411,32 +479,30 @@ function renderSheet() {
 
   const groupedRows = groupRowsByUnique();
   let rowNumber = 1;
-  groupedRows.forEach((group, index) => {
-    const hasSub = group.subRows && group.subRows.length > 0;
-    // Render combined row with row number.
-    html += `<tr class="combined-row ${hasSub ? 'accordion' : ''}" data-index="${index}">`;
+
+  groupedRows.forEach((g, idx) => {
+    const hasSub = g.subRows && g.subRows.length>0;
+    html += `<tr class="combined-row ${hasSub ? 'accordion':''}" data-index="${idx}">`;
     html += `<td>${rowNumber++}</td>`;
     columnsConfig.forEach(col => {
-      let rawVal = (group.combined[col.id] !== undefined ? group.combined[col.id] : '');
+      const rawVal = (g.combined[col.id] !== undefined) ? g.combined[col.id] : '';
       html += `<td>${formatValue(rawVal, col.data_type)}</td>`;
     });
     html += '</tr>';
 
-    // Render sub-rows if available.
     if (hasSub) {
-      html += `<tr class="sub-rows" data-parent-index="${index}" style="display:none;"><td colspan="${columnsConfig.length + 1}">`;
+      html += `<tr class="sub-rows" data-parent-index="${idx}" style="display:none;"><td colspan="${columnsConfig.length+1}">`;
       html += '<table class="sub-table">';
-      // Header for sub-table (with row numbers).
       html += '<tr><th>Row</th>';
       columnsConfig.forEach(col => {
         html += `<th>${col.heading}</th>`;
       });
       html += '</tr>';
-      group.subRows.forEach(subRow => {
+      g.subRows.forEach(row => {
         html += '<tr>';
         html += `<td>${rowNumber++}</td>`;
         columnsConfig.forEach(col => {
-          let rawVal = (subRow[col.id] !== undefined ? subRow[col.id] : subRow[col.heading] || '');
+          const rawVal = (row[col.id] !== undefined) ? row[col.id] : '';
           html += `<td>${formatValue(rawVal, col.data_type)}</td>`;
         });
         html += '</tr>';
@@ -445,7 +511,7 @@ function renderSheet() {
     }
   });
 
-  // Totals row.
+  // Totals row
   const totals = computeTotals();
   html += '<tr class="totals-row"><td></td>';
   columnsConfig.forEach(col => {
@@ -453,154 +519,270 @@ function renderSheet() {
   });
   html += '</tr>';
 
-  table.innerHTML = html;
+  table.innerHTML=html;
 
-  // Set up accordion toggle.
+  // Accordion toggles
   document.querySelectorAll('.combined-row.accordion').forEach(row => {
-    row.addEventListener('click', function() {
-      const index = this.getAttribute('data-index');
-      const subRow = document.querySelector(`.sub-rows[data-parent-index="${index}"]`);
-      subRow.style.display = (subRow.style.display === 'none') ? 'table-row' : 'none';
+    row.addEventListener('click', () => {
+      const idx=row.getAttribute('data-index');
+      const sub=document.querySelector(`.sub-rows[data-parent-index="${idx}"]`);
+      sub.style.display=(sub.style.display==='none')?'table-row':'none';
     });
   });
 }
 
-// Updated default columnsConfig can remain as is or be overwritten by a loaded/new sheet.
+// ----------------------------------------------------------------------
+// 11. "New Sheet" & "Edit Sheet" Modal logic
+// (We store user-defined source names for potential autocompletion.)
+// ----------------------------------------------------------------------
+let rememberedSourceNames = new Set();
+let lastLoadedCsvHeaders = [];
 
-// -------------
-// NEW SHEET MODAL LOGIC
-// -------------
-const newSheetButton = document.getElementById('newSheetButton');
-const newSheetModal = document.getElementById('newSheetModal');
-const closeModal = document.getElementById('closeModal');
-const addColumnButton = document.getElementById('addColumnButton');
-const columnsContainer = document.getElementById('columnsContainer');
-const saveNewSheetButton = document.getElementById('saveNewSheetButton');
-const newSheetNameInput = document.getElementById('newSheetName');
+const newSheetButton       = document.getElementById('newSheetButton');
+const editSheetButton      = document.getElementById('editSheetButton');
+const newSheetModal        = document.getElementById('newSheetModal');
+const closeModal           = document.getElementById('closeModal');
+const addColumnButton      = document.getElementById('addColumnButton');
+const columnsContainer     = document.getElementById('columnsContainer');
+const saveNewSheetButton   = document.getElementById('saveNewSheetButton');
+const newSheetNameInput    = document.getElementById('newSheetName');
+const modalTitle           = document.getElementById('modalTitle');
+const csvHeadersInput      = document.getElementById('csvHeadersInput');
+const csvHeadersNotice     = document.getElementById('csvHeadersNotice');
 
-// Example: list of functions from functions.js (keys from window.functions)
-const availableFunctions = window.functions ? Object.keys(window.functions) : [];
+// If user picks a CSV just to see its headers in the modal
+csvHeadersInput.addEventListener('change',(e)=>{
+  const file=e.target.files[0];
+  if (!file) return;
+  const r=new FileReader();
+  r.onload=(evt)=>{
+    const lines=evt.target.result.split(/\r?\n/).filter(x=>x.trim()!=='');
+    if (lines.length>0){
+      const hdrs=lines[0].split(',').map(x=>x.trim());
+      lastLoadedCsvHeaders=hdrs;
+      csvHeadersNotice.textContent='Headers loaded: '+hdrs.join(', ');
+    }
+  };
+  r.readAsText(file);
+});
 
-// Utility to create a new column editor row.
-function createColumnEditor(initialData = {}) {
-  const row = document.createElement('div');
-  row.className = 'column-editor';
-  // Heading input (enabled only on first row initially; can be edited later)
-  row.innerHTML = `
-    <div class="column-row">
-      <input type="text" class="col-heading" placeholder="Heading" value="${initialData.heading || ''}" />
+// Show "New" modal
+newSheetButton.addEventListener('click', () => {
+  showModal('New Sheet');
+});
+
+// Show "Edit" modal
+editSheetButton.addEventListener('click', () => {
+  showModal('Edit Sheet', columnsConfig, getSheetNameFromConfig());
+});
+
+closeModal.addEventListener('click', () => {
+  newSheetModal.style.display='none';
+});
+
+addColumnButton.addEventListener('click', () => {
+  columnsContainer.appendChild(createColumnEditor({}));
+});
+
+// Returns a default or existing name
+function getSheetNameFromConfig() {
+  // Could store config name in local storage; here we just guess a name
+  return 'EditedSheet';
+}
+
+function showModal(mode, existingColumns, sheetName) {
+  newSheetModal.style.display='block';
+  modalTitle.textContent=mode;
+  columnsContainer.innerHTML='';
+  newSheetNameInput.value=sheetName||'';
+
+  if (mode==='New Sheet') {
+    columnsContainer.appendChild(createColumnEditor({}));
+  } else {
+    (existingColumns||[]).forEach(col=>{
+      columnsContainer.appendChild(createColumnEditor(col));
+      if (col.source_name) rememberedSourceNames.add(col.source_name);
+    });
+  }
+}
+
+// Builds an individual column editor
+function createColumnEditor(initialData) {
+  if (!initialData) initialData={};
+
+  const container=document.createElement('div');
+  container.className='column-editor';
+  container.innerHTML=`
+    <div class="editor-row">
+      <label>Heading</label>
+      <input type="text" class="col-heading" value="${initialData.heading||''}"/>
+    </div>
+    <div class="editor-row">
+      <label>Type</label>
       <select class="col-type">
-        <option value="data" ${initialData.column_type==='data'?'selected':''}>Data</option>
-        <option value="function" ${initialData.column_type==='function'?'selected':''}>Function</option>
-        <option value="formula" ${initialData.column_type==='formula'?'selected':''}>Formula</option>
+        <option value="data">data</option>
+        <option value="function">function</option>
+        <option value="formula">formula</option>
       </select>
+    </div>
+    <div class="editor-row">
+      <label>Data&nbsp;Type</label>
       <select class="data-type">
-        <option value="unique">Unique (e.g., ID)</option>
-        <option value="currency">Currency (e.g., $123.45)</option>
-        <option value="rate">Rate (e.g., 5.00%)</option>
-        <option value="float">Float (e.g., 12.34)</option>
-        <option value="integer">Integer (e.g., 123)</option>
-        <option value="strings">String</option>
+        <option value="unique">unique</option>
+        <option value="currency">currency</option>
+        <option value="rate">rate</option>
+        <option value="float">float</option>
+        <option value="integer">integer</option>
+        <option value="strings">strings</option>
+        <option value="date">date</option>
       </select>
+    </div>
+    <div class="editor-row data-options" style="display:none;">
+      <label>Source</label>
+      <input type="text" class="source-name" list="sourceNamesList" placeholder="Source Name"/>
+    </div>
+    <div class="editor-row data-options" style="display:none;">
+      <label>CSV&nbsp;ID</label>
+      <select class="csv-id-select">
+        <option value="">(No headers loaded)</option>
+      </select>
+    </div>
+    <div class="editor-row function-options" style="display:none;">
+      <label>Function</label>
+      <div contenteditable="true" class="function-input"></div>
+    </div>
+    <div class="editor-row formula-options" style="display:none;">
+      <label>Formula</label>
+      <div contenteditable="true" class="formula-input"></div>
+    </div>
+    <div class="column-controls">
       <span class="icon move-left" title="Move Left">&#9664;</span>
       <span class="icon move-right" title="Move Right">&#9654;</span>
       <span class="icon remove" title="Remove Column">&#10006;</span>
     </div>
-    <div class="column-extra">
-      <!-- Extra fields appear based on column type -->
-      <div class="data-options" style="display:none;">
-        <input type="text" class="source-name" placeholder="Source Name" value="${initialData.source_name || ''}" />
-        <input type="text" class="csv-id" placeholder="CSV Header ID" value="${initialData.id || ''}" />
-      </div>
-      <div class="function-options" style="display:none;">
-        <div contenteditable="true" class="function-input" placeholder="Enter function e.g., interestIncome(principal, rate)">${initialData.function || ''}</div>
-        <div class="function-hint">Available functions: ${availableFunctions.join(', ')}</div>
-      </div>
-      <div class="formula-options" style="display:none;">
-        <div contenteditable="true" class="formula-input" placeholder="Enter formula e.g., interestIncome * 0.1">${initialData.formula || ''}</div>
-      </div>
-    </div>
   `;
-  // Show/hide extra fields based on column type selection.
-  const colTypeSelect = row.querySelector('.col-type');
-  function updateExtraFields() {
-    const type = colTypeSelect.value;
-    row.querySelector('.data-options').style.display = (type === 'data') ? 'block' : 'none';
-    row.querySelector('.function-options').style.display = (type === 'function') ? 'block' : 'none';
-    row.querySelector('.formula-options').style.display = (type === 'formula') ? 'block' : 'none';
+
+  const headingInput=container.querySelector('.col-heading');
+  const colTypeSelect=container.querySelector('.col-type');
+  const dataTypeSelect=container.querySelector('.data-type');
+  const sourceNameInput=container.querySelector('.source-name');
+  const csvIdSelect=container.querySelector('.csv-id-select');
+  const funcInput=container.querySelector('.function-input');
+  const formulaInput=container.querySelector('.formula-input');
+
+  // Initialize from existing data
+  if (initialData.column_type) colTypeSelect.value=initialData.column_type;
+  if (initialData.data_type) dataTypeSelect.value=initialData.data_type;
+  if (initialData.column_type==='data') {
+    sourceNameInput.value=initialData.source_name||'';
   }
-  colTypeSelect.addEventListener('change', updateExtraFields);
+  if (initialData.column_type==='function' && initialData.function) {
+    funcInput.textContent=initialData.function;
+  }
+  if (initialData.column_type==='formula' && initialData.formula) {
+    formulaInput.textContent=initialData.formula;
+  }
+
+  // Build CSV ID <select>
+  if (lastLoadedCsvHeaders.length>0) {
+    csvIdSelect.innerHTML=lastLoadedCsvHeaders.map(h=>`<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join('');
+    if (initialData.id && lastLoadedCsvHeaders.includes(initialData.id)) {
+      csvIdSelect.value=initialData.id;
+    } else {
+      // Option to leave blank
+      const optBlank=document.createElement('option');
+      optBlank.value='';
+      optBlank.textContent='(None)';
+      csvIdSelect.insertBefore(optBlank, csvIdSelect.firstChild);
+      csvIdSelect.value='';
+    }
+  } else {
+    // If user had an ID set, add it
+    if (initialData.id) {
+      const opt=document.createElement('option');
+      opt.value=initialData.id;
+      opt.textContent=initialData.id;
+      csvIdSelect.appendChild(opt);
+      csvIdSelect.value=initialData.id;
+    }
+  }
+
+  function updateExtraFields(){
+    const t=colTypeSelect.value;
+    container.querySelectorAll('.data-options').forEach(n=>n.style.display=(t==='data'?'flex':'none'));
+    container.querySelector('.function-options').style.display=(t==='function'?'flex':'none');
+    container.querySelector('.formula-options').style.display=(t==='formula'?'flex':'none');
+  }
+  colTypeSelect.addEventListener('change',updateExtraFields);
   updateExtraFields();
 
-  // Remove column event.
-  row.querySelector('.remove').addEventListener('click', () => {
-    row.remove();
-  });
-  // Move left/right events.
-  row.querySelector('.move-left').addEventListener('click', () => {
-    if (row.previousElementSibling) {
-      columnsContainer.insertBefore(row, row.previousElementSibling);
+  // Move left
+  container.querySelector('.move-left').addEventListener('click',()=>{
+    if (container.previousElementSibling){
+      columnsContainer.insertBefore(container, container.previousElementSibling);
     }
   });
-  row.querySelector('.move-right').addEventListener('click', () => {
-    if (row.nextElementSibling) {
-      columnsContainer.insertBefore(row.nextElementSibling, row);
+  // Move right
+  container.querySelector('.move-right').addEventListener('click',()=>{
+    if (container.nextElementSibling){
+      columnsContainer.insertBefore(container.nextElementSibling, container);
     }
   });
-  return row;
+  // Remove
+  container.querySelector('.remove').addEventListener('click',()=>{
+    container.remove();
+  });
+
+  return container;
 }
 
-// When user clicks "New", display the modal.
-newSheetButton.addEventListener('click', () => {
-  newSheetModal.style.display = 'block';
-  // Clear previous content.
-  columnsContainer.innerHTML = '';
-  // Create one default column editor row.
-  columnsContainer.appendChild(createColumnEditor());
-});
+function escapeHtml(str){
+  return str.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
-// Close modal when the close button is clicked.
-closeModal.addEventListener('click', () => {
-  newSheetModal.style.display = 'none';
-});
+// Save new or edited config
+saveNewSheetButton.addEventListener('click', ()=>{
+  const newColumns=[];
+  const editors=columnsContainer.querySelectorAll('.column-editor');
+  editors.forEach(ed=>{
+    const heading=ed.querySelector('.col-heading').value.trim();
+    const column_type=ed.querySelector('.col-type').value;
+    const data_type=ed.querySelector('.data-type').value;
+    const sourceName=ed.querySelector('.source-name');
+    const csvIdSel=ed.querySelector('.csv-id-select');
+    const func=ed.querySelector('.function-input');
+    const formula=ed.querySelector('.formula-input');
 
-// Add column button.
-addColumnButton.addEventListener('click', () => {
-  columnsContainer.appendChild(createColumnEditor());
-});
+    let col={ heading, column_type, data_type };
+    col.id=heading.toLowerCase().replace(/\s+/g,'');
 
-// When user clicks "Save", build the new columnsConfig JSON.
-saveNewSheetButton.addEventListener('click', () => {
-  const newColumns = [];
-  const editors = columnsContainer.querySelectorAll('.column-editor');
-  editors.forEach(editor => {
-    const heading = editor.querySelector('.col-heading').value.trim();
-    const column_type = editor.querySelector('.col-type').value;
-    const data_type = editor.querySelector('.data-type').value;
-    let col = { heading, column_type, data_type };
-    // Always assign an id. For simplicity, convert heading to lowercase without spaces.
-    col.id = heading.toLowerCase().replace(/\s+/g, '');
-    if (column_type === 'data') {
-      col.source_name = editor.querySelector('.source-name').value.trim();
-      col.id = editor.querySelector('.csv-id').value.trim() || col.id;
-    } else if (column_type === 'function') {
-      col.function = editor.querySelector('.function-input').innerText.trim();
-    } else if (column_type === 'formula') {
-      col.formula = editor.querySelector('.formula-input').innerText.trim();
+    if (column_type==='data'){
+      col.source_name=(sourceName?sourceName.value.trim():'');
+      rememberedSourceNames.add(col.source_name);
+      col.id=csvIdSel.value.trim()||col.id;
+    } else if (column_type==='function'){
+      col.function=(func?func.innerText.trim():'');
+    } else if (column_type==='formula'){
+      col.formula=(formula?formula.innerText.trim():'');
     }
     newColumns.push(col);
   });
-  // Get the new sheet name.
-  const sheetName = newSheetNameInput.value.trim() || "NewSheet";
-  // Build the new configuration.
-  const newConfig = {
-    sheetName: sheetName,
-    columnsConfig: newColumns
-  };
-  console.log("New sheet configuration:", newConfig);
-  // Here you could save the JSON to a file or localStorage.
-  // For demonstration, we update the global columnsConfig and close the modal.
-  columnsConfig = newConfig.columnsConfig;
-  newSheetModal.style.display = 'none';
+
+  const sheetName=newSheetNameInput.value.trim()||'NewSheet';
+  const newConfig={ sheetName, columnsConfig:newColumns };
+
+  // Download JSON file
+  const blob=new Blob([JSON.stringify(newConfig,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=sheetName.replace(/\s+/g,'_')+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+
+  // Update in memory
+  columnsConfig=newColumns;
+  newSheetModal.style.display='none';
   alert('New sheet configuration saved. You can now load CSV sources.');
+  setupSourceFileInputs();
 });
