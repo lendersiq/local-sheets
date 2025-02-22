@@ -132,6 +132,11 @@ input[type="file"] {
   margin-right: 5px;
 }
 
+/* Navigation dropdown item icons, etc. */
+.dropdown-item .icon {
+  margin-right: 5px;
+}
+
 /* Modal styling */
 .modal {
   display: none; /* Hidden by default */
@@ -146,11 +151,11 @@ input[type="file"] {
 }
 .modal-content {
   background-color: #fefefe;
-  margin: 10% auto;
+  margin: 5% auto;
   padding: 20px;
   border: 1px solid #888;
   width: 80%;
-  max-width: 600px;
+  max-width: 800px;
   border-radius: 5px;
   position: relative;
 }
@@ -164,56 +169,101 @@ input[type="file"] {
 .close-button:hover {
   color: #000;
 }
+#modalTitle {
+  margin-bottom: 10px;
+}
 #newSheetForm {
   margin-top: 20px;
 }
+.notice {
+  font-size: 0.9em;
+  color: #666;
+  margin-bottom: 10px;
+}
+
+/* Column container for a horizontal layout of column editors */
+#columnsContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* The column editor is a box with inputs laid out vertically */
 .column-editor {
   border: 1px solid #ccc;
   padding: 10px;
-  margin-bottom: 10px;
+  width: 300px;
+  min-width: 250px;
+  border-radius: 5px;
+  position: relative;
+  background-color: #fafafa;
+  display: flex;
+  flex-direction: column;
 }
-.column-row {
+.column-editor .editor-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-.column-row input.col-heading {
-  flex: 2;
-}
-.column-row select {
-  flex: 1;
-}
-.column-row .icon {
-  cursor: pointer;
-}
-.column-extra {
-  margin-top: 10px;
-}
-.column-extra > div {
   margin-bottom: 5px;
 }
-.column-extra input,
-.column-extra .function-input,
-.column-extra .formula-input {
-  width: 100%;
-  padding: 5px;
+.column-editor .editor-row label {
+  width: 100px;
+  font-size: 0.9em;
+  margin-right: 5px;
+}
+.column-editor .editor-row input[type="text"],
+.column-editor .editor-row select,
+.column-editor .editor-row .function-input,
+.column-editor .editor-row .formula-input {
+  flex: 1;
+  padding: 4px;
+  font-size: 0.9em;
+}
+
+/* For the function & formula editable divs */
+.function-input,
+.formula-input {
   border: 1px solid #ccc;
+  min-height: 24px;
+}
+
+/* Move left/right, remove icons */
+.column-controls {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+}
+.column-controls .icon {
+  cursor: pointer;
+  font-size: 1.1em;
+  padding: 2px 5px;
+}
+.column-controls .icon:hover {
+  background-color: #e0e0e0;
   border-radius: 3px;
 }
-.function-input, .formula-input {
-  min-height: 30px;
-}
+
 .modal-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-top: 20px;
 }
 .modal-footer input {
-  flex: 2;
   margin-right: 10px;
-}
-.modal-footer button {
   flex: 1;
 }
+.modal-footer button {
+  flex: 0 0 auto;
+}
 
+.csv-id-container {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.load-headers-btn {
+  padding: 3px 6px;
+  font-size: 0.8em;
+  cursor: pointer;
+}
