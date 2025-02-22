@@ -13,6 +13,11 @@
       <button class="menu-button" id="newSheetButton">
         <span class="icon">🆕</span> New
       </button>
+      <!-- Edit Option with Icon -->
+      <button class="menu-button" id="editSheetButton">
+        <span class="icon">✏️</span> Edit
+      </button>
+
       <button class="menu-button" id="fileMenuButton">
         <span class="icon">📂</span> File
       </button>
@@ -38,16 +43,23 @@
   <input type="file" id="sheetConfigInput" accept=".json" style="display: none;">
   <!-- CSV file inputs for each source will be created dynamically -->
 
-  <!-- Modal for creating a new sheet -->
+  <!-- Modal for creating/editing a sheet -->
   <div id="newSheetModal" class="modal">
     <div class="modal-content">
       <span class="close-button" id="closeModal">&times;</span>
-      <h2>Create New Sheet</h2>
+      <h2 id="modalTitle">Create/Edit Sheet</h2>
+
+      <!-- CSV Headers Loader (for data columns) -->
+      <label for="csvHeadersInput" class="csv-headers-label">
+        Load CSV to get headers:
+        <input type="file" id="csvHeadersInput" accept=".csv">
+      </label>
+      <div id="csvHeadersNotice" class="notice"></div>
+
       <div id="newSheetForm">
-        <!-- The new sheet form will contain a list of column editors -->
-        <div id="columnsContainer">
-          <!-- One column row is added by default -->
-        </div>
+        <!-- The new sheet form will contain a row of column-editor(s) horizontally -->
+        <div id="columnsContainer"></div>
+
         <button id="addColumnButton">Add Column</button>
         <div class="modal-footer">
           <input type="text" id="newSheetName" placeholder="Sheet Name" />
