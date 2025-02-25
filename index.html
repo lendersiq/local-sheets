@@ -6,37 +6,70 @@
   <link rel="stylesheet" href="styles/base.css">
 </head>
 <body>
-  <!-- Navigation Bar with File Menu -->
-  <nav>
+  <nav class="navbar">
     <div class="menu">
-      <!-- New Option with Icon -->
-      <button class="menu-button" id="newSheetButton">
-        <span class="icon">🆕</span> New
-      </button>
-      <!-- Edit Option with Icon -->
-      <button class="menu-button" id="editSheetButton">
-        <span class="icon">✏️</span> Edit
-      </button>
-
+      <!-- File Option with Icon -->
       <button class="menu-button" id="fileMenuButton">
-        <span class="icon">📂</span> File
+        <span class="icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M2 5H8L10 8H18V15C18 16.1 17.1 17 16 17H2V5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        File
       </button>
+  
       <div class="dropdown" id="fileDropdown">
         <button class="dropdown-item" id="openSheetButton">
-          <span class="icon">📄</span> Open Sheet
+          <span class="icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M6 2H14L18 6V18H2V2H6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          Open Sheet
         </button>
         <!-- Dynamically created CSV source buttons go here -->
       </div>
+  
+      <!-- New Option with Icon -->
+      <button class="menu-button" id="newSheetButton">
+        <span class="icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 4V16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </span>
+        New
+      </button>
+  
+      <!-- Edit Option with Icon -->
+      <button class="menu-button" id="editSheetButton">
+        <span class="icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M4 13L13 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M4 16H7L16 7L13 4L4 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </span>
+        Edit
+      </button>
+  
+      <!-- Export Option with Icon -->
+      <button class="menu-button" onclick="exportTableToCSV('spreadsheet', 'my_data.csv')" id="exportSheetButton">
+        <span class="icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M5 20h14v-2H5v2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 4l-7 7h4v6h6v-6h4l-7-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        Export
+      </button>
     </div>
   </nav>
 
-  <header>
-    <h1>Local Sheets</h1>
-  </header>
-  
   <main>
     <div id="errorDisplay"></div>
-    <table id="spreadsheet"></table>
+    <div class="table-container">
+      <table id="spreadsheet"></table>
+    </div>
   </main>
 
   <!-- Hidden file input for sheet configuration -->
@@ -68,7 +101,7 @@
       </div>
     </div>
   </div>
-
+  <script src="js/ai.js"></script>
   <!-- Include the functions library -->
   <script src="libraries/functions.js"></script>
   <!-- Include the main sheets JavaScript -->
