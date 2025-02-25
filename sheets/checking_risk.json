@@ -1,0 +1,10 @@
+{
+  "columnsConfig": [
+    { "heading": "Portfolio", "id": "portfolio", "column_type": "data", "data_type": "unique", "source_name": "checking" },
+    { "heading": "Balance", "id": "Average_Balance", "column_type": "data", "data_type": "currency", "source_name": "checking"  },
+    { "heading": "Checks", "id": "PMTD_Checks", "column_type": "data", "data_type": "integer", "source_name": "checking" },
+    { "heading": "Deposits", "id": "PMTD_Number_of_Deposits", "column_type": "data", "data_type": "integer", "source_name": "checking" },
+    { "heading": "NSFs", "id": "PMTD_Number_of_Items_NSF", "column_type": "data", "data_type": "integer", "source_name": "checking" },
+    { "heading": "Risk Rating", "id": "risk_rating", "column_type": "function", "function": "risk(Average_Balance, PMTD_Checks, PMTD_Number_of_Deposits, PMTD_Number_of_Items_NSF)", "data_type": "integer" }
+  ]
+}
