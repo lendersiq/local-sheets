@@ -11,57 +11,90 @@ body {
   background-color: #fff;
   color: #333;
   line-height: 1.6;
-  padding: 20px;
+  padding: 60px 20px 10px 20px;
+  overflow-y: hidden;
 }
 
 /* Navigation Bar */
 nav {
-  background-color: #f8f8f8;
-  border-bottom: 1px solid #ccc;
-  padding: 10px 20px;
-  position: relative;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background-color: #fff; /* Adjust as needed */
+  z-index: 1000;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
-/* Menu Container */
-.menu {
-  display: inline-block;
-  position: relative;
+/* Basic styling for the menu container */
+nav .menu {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
 }
 
-/* File Menu Button */
+/* Style for menu buttons */
 .menu-button {
-  background-color: #fff;
-  border: 1px solid #ccc;
-  padding: 8px 12px;
+  background: none;
+  border: none;
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  color: #333;
+  font-size: 1rem;
   cursor: pointer;
-  font-size: 14px;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.menu-button:hover {
+  background-color: #f0f0f0;
+  border-radius: 4px;
+}
+
+/* Icon styling */
+.menu-button .icon {
+  margin-right: 0.5rem;
+  display: inline-flex;
 }
 
 /* Dropdown Styling */
 .dropdown {
-  display: none;
   position: absolute;
   top: 100%;
   left: 0;
-  background-color: #fff;
-  border: 1px solid #ccc;
-  min-width: 150px;
+  background: #fff;
+  border: 1px solid #eaeaea;
+  border-radius: 4px;
+  padding: 0.5rem 0;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+  display: none;
   z-index: 1000;
 }
+
+.dropdown-item {
+  background: none;
+  border: none;
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  color: #333;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
 .dropdown.show {
   display: block;
 }
-.dropdown-item {
-  width: 100%;
-  padding: 8px 12px;
-  background: none;
-  border: none;
-  text-align: left;
-  cursor: pointer;
-  font-size: 14px;
-}
+
 .dropdown-item:hover {
-  background-color: #f0f0f0;
+  background-color: #f9f9f9;
+}
+
+.dropdown-item .icon {
+  margin-right: 0.5rem;
+  display: inline-flex;
 }
 
 /* Header Styling */
@@ -76,16 +109,31 @@ main {
 }
 
 /* Spreadsheet Table */
-#spreadsheet {
+.table-container {
+  max-height: 800px; /* Adjust this height as needed */
+  overflow-y: auto;
+}
+
+table {
   border-collapse: collapse;
   width: 100%;
-  margin-top: 20px;
 }
+
+thead th {
+  position: sticky;
+  top: 0;
+  background-color: #fff; /* Adjust background to match your design */
+  z-index: 2; /* Ensure headers appear above table body cells */
+  padding: 0.5rem;
+  border-bottom: 2px solid #ccc;
+}
+
 #spreadsheet th, #spreadsheet td {
   border: 1px solid #ddd;
   padding: 8px;
   text-align: left;
 }
+
 #spreadsheet th {
   background-color: #f2f2f2;
 }
