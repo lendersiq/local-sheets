@@ -4,7 +4,7 @@
 // 1. Updated default columnsConfig with date columns and formula
 //
 let columnsConfig = [
-  { heading: 'Portfolio', id: 'portfolio', column_type: 'data', data_type: 'unique'},
+  { heading: 'Portfolio', id: 'Portfolio', column_type: 'data', data_type: 'unique'},
   { heading: 'Principal', id: 'principal', column_type: 'data', data_type: 'currency', source_name: 'loan' },
   { heading: 'Loan Type', id: 'Type_Code', column_type: 'data', data_type: 'integer', source_name: 'loan', filter: '{{20}}' },
   { heading: 'Payment',   id: 'Last_Payment',   column_type: 'data', data_type: 'currency', source_name: 'loan' },
@@ -18,6 +18,8 @@ let columnsConfig = [
 // Global storage for CSV data
 let sheetData = [];
 let statistics = {};
+let sheetName = 'Local Sheets';
+document.title = sheetName;
 
 // ----------------------------------------------------------------------
 // 2. Format values (currency, rate, etc.)
@@ -110,7 +112,8 @@ document.getElementById('sheetConfigInput').addEventListener('change', (event) =
           columnsConfig = config.columnsConfig;
           sheetData = [];
           renderSheet();
-          alert('Sheet configuration loaded. Now open CSV sources.');
+          sheetName =  file.name.replace(/\.json/g, "");
+          document.title = sheetName;
           // Rebuild CSV file inputs
           setupSourceFileInputs();
         } else {
@@ -186,7 +189,7 @@ function setupSourceFileInputs() {
 function parseCSVForSource(text, source) {
   const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
   if (!lines.length) return;
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+  const headers = lines[0].split(',').map(h => h.trim());
   const newRows = lines.slice(1).map(line => {
     const values = line.split(',').map(v => v.trim());
     const row = {};
@@ -1099,7 +1102,7 @@ saveNewSheetButton.addEventListener('click', ()=>{
   setupSourceFileInputs();
 });
 
-function exportTableToCSV(tableID, filename = 'export.csv') {
+function exportTableToCSV(tableID, filename = sheetName) {
   var csv = [];
   // Get all rows within the designated table
   var allRows = document.querySelectorAll("table#" + tableID + " tr");
@@ -1116,7 +1119,9 @@ function exportTableToCSV(tableID, filename = 'export.csv') {
     
     var row = [];
     var cols = currentRow.querySelectorAll("td, th");
-    cols.forEach(function(col) {
+    cols.forEach(function(col, colIndex) {
+      // Skip the first column (colIndex === 0)
+      if (colIndex === 0) return;
       // Clone the cell to avoid modifying the original table
       var cellClone = col.cloneNode(true);
       // Remove any nested tables from the cloned cell
