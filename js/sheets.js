@@ -8,7 +8,7 @@ let columnsConfig = [
   { heading: 'Principal', id: 'principal', column_type: 'data', data_type: 'currency', source_name: 'loan' },
   { heading: 'Loan Type', id: 'Type_Code', column_type: 'data', data_type: 'integer', source_name: 'loan', filter: '{{20}}' },
   { heading: 'Payment',   id: 'Last_Payment',   column_type: 'data', data_type: 'currency', source_name: 'loan' },
-  { heading: 'Maturity',  id: 'maturity_date',  column_type: 'data', data_type: 'date',     source_name: 'loan', filter: '< 2039-12-11' },
+  { heading: 'Maturity',  id: 'maturity_date',  column_type: 'data', data_type: 'date',     source_name: 'loan', filter: '< 2059-12-11' },
   { heading: 'Rate',      id: 'rate',           column_type: 'data', data_type: 'rate',     source_name: 'loan' },
   { heading: 'Balance',   id: 'average_balance', column_type: 'data', data_type: 'currency', source_name: 'checking' },
   { heading: 'Average',   id: 'averageBalance', column_type: 'function', function: 'averageBalance(principal, Last_Payment, rate, maturity_date)', data_type: 'currency' },
@@ -558,6 +558,9 @@ function applyGroupFilter(sheetData, columnsConfig) {
       rowFilters.push(filterDef);
     }
   });
+
+  console.log('groupFilters', groupFilters);
+  console.log('rowFilters', rowFilters);
   
   // 3. Group rows by the unique column value.
   const groups = sheetData.reduce((acc, row) => {
@@ -572,14 +575,19 @@ function applyGroupFilter(sheetData, columnsConfig) {
   // 4. Determine which groups qualify by checking group-level filters.
   const qualifyingGroups = Object.values(groups).filter(group => {
     // For each filter in groupFilters, at least one row in this group must satisfy it
-    return groupFilters.every(filterDef =>
-      group.some(row => {
-        if (filterDef.source && row.__source !== filterDef.source) {
-          return false;
-        }
-        return filterDef.condition(row[filterDef.id]);
-      })
-    );
+    return groupFilters.every(filterDef => {
+      // Filter the rows by matching source. If filterDef.source is null/undefined,
+      // that means "applies to all sources," so we keep all rows.
+      const relevantRows = filterDef.source
+        ? group.filter(r => r.__source === filterDef.source)
+        : group;
+      
+      // If no rows match this source in the group, skip the filter => pass
+      if (relevantRows.length === 0) return true;
+      
+      // Otherwise, at least one relevant row must satisfy the condition
+      return relevantRows.some(r => filterDef.condition(r[filterDef.id]));
+    });
   });
   
   // 5. From each qualified group, only include rows that pass all row-level filters individually.
@@ -588,7 +596,7 @@ function applyGroupFilter(sheetData, columnsConfig) {
     group.forEach(row => {
       const passesRow = rowFilters.every(filterDef => {
         if (filterDef.source && row.__source !== filterDef.source) {
-          return true; // not applicable to this row
+          return true; // skip for low level
         }
         return filterDef.condition(row[filterDef.id]);
       });
@@ -607,8 +615,14 @@ const columnsConfig2 = [
   { heading: 'Portfolio', id: 'portfolio', column_type: 'data', data_type: 'unique' },
   { heading: 'Principal', id: 'principal', column_type: 'data', data_type: 'currency', source_name: 'loan', filter: '> 100' },
   { heading: 'Loan Type', id: 'Type_Code', column_type: 'data', data_type: 'integer', source_name: 'loan', filter: '{{20}}' },
-  { heading: 'Payment', id: 'Last_Payment', column_type: 'data', data_type: 'currency', source_name: 'loan' }
-];
+  { heading: 'Payment', id: 'Last_Payment', column_type: 'data', data_type: 'currency', source_name: 'loan' },
+  {
+    heading: 'Balance',
+    id: 'Balance',
+    data_type: 'currency',
+    source_name: 'checking'
+    // no filter needed, just referencing "checking" makes it "required"
+  }];
 
 const sheetData2 = [
   // Group "A":
@@ -619,23 +633,73 @@ const sheetData2 = [
   // Row 3: passes principal filter (200 > 100) even though Type_Code is 15,
   // but group "A" qualifies because of row 1’s {{20}} condition.
   { portfolio: "A", principal: "200", __source: "loan", Type_Code: "15", Last_Payment: "2000" },
+  { portfolio: "C", principal: "300", __source: "loan", Type_Code: "20", Last_Payment: "2000" },
   // Group "C": Single row that passes both filters.
-  { portfolio: "C", principal: "300", __source: "loan", Type_Code: "20", Last_Payment: "3000" }
+  { portfolio: "C", Balance: "300", __source: "checking", Type_Code: "10" }
 ];
 
 const filteredRows = applyGroupFilter(sheetData2, columnsConfig2);
 console.log('filteredRows 1', filteredRows);
 
-/* Expected output:
-[
-  // From group "A": only rows that meet the row-level filter (principal > 100):
-  { portfolio: "A", principal: "150", __source: "loan", Type_Code: "20", Last_Payment: "1000" },
-  { portfolio: "A", principal: "200", __source: "loan", Type_Code: "15", Last_Payment: "2000" },
-  // From group "C":
-  { portfolio: "C", principal: "300", __source: "loan", Type_Code: "20", Last_Payment: "3000" }
-]
-*/
+const finalFilteredRows = uniquesIncludingEverySource(
+  filteredRows, 
+  columnsConfig2
+);
 
+// finalFilteredRows now includes only rows from a single source for each portfolio.
+console.log('finalFilteredRows', finalFilteredRows);
+
+/**
+ * Given an array of already-filtered rows (from applyGroupFilter),
+ * this function returns only those portfolios that have *every* source in requiredSources.
+ *
+ * @param {Array<Object>} rows - The rows that passed applyGroupFilter.
+ * @param {Array<Object>} columnsConfig - Array of column definitions.
+ * @param {String} uniqueColId - The grouping column ID (e.g. "portfolio").
+ * @returns {Array<Object>} - A subset of rows, only from portfolios that contain all requiredSources.
+ */
+function uniquesIncludingEverySource(rows, columnsConfig) {
+  const requiredSources = getRequiredSources(columnsConfig); 
+  const uniqueCol = columnsConfig.find(col => col.data_type === 'unique');
+  if (!uniqueCol) {
+    console.error('No unique column defined in columnsConfig');
+    return [];
+  }
+  const uniqueColId = uniqueCol.id;
+  // Group rows by portfolio
+  const grouped = {};
+  rows.forEach(r => {
+    const p = r[uniqueColId];
+    if (!grouped[p]) grouped[p] = [];
+    grouped[p].push(r);
+  });
+  
+  const result = [];
+  for (const [portfolioValue, groupRows] of Object.entries(grouped)) {
+    // Find distinct sources in this portfolio
+    const distinctSources = new Set(groupRows.map(r => r.__source));
+    // Check if every required source is present
+    const hasAllSources = requiredSources.every(src => distinctSources.has(src));
+    
+    if (hasAllSources) {
+      // Keep all rows for this portfolio
+      result.push(...groupRows);
+    }
+  }
+  
+  return result;
+}
+
+function getRequiredSources(columnsConfig) {
+  // Example: if columnsConfig has columns with source_name: 'loan', 'checking'
+  // this produces something like ['loan', 'checking']
+  const sources = columnsConfig
+    .map(c => c.source_name)
+    .filter(src => typeof src === 'string'); // keep only non-null strings
+  
+  // Deduplicate
+  return [...new Set(sources)];
+}
 
 
 function groupRowsByUnique() {
