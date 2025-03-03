@@ -6,7 +6,7 @@
 let columnsConfig = [
   { heading: 'Portfolio', id: 'Portfolio', column_type: 'data', data_type: 'unique'},
   { heading: 'Principal', id: 'principal', column_type: 'data', data_type: 'currency', source_name: 'loan' },
-  { heading: 'Loan Type', id: 'Type_Code', column_type: 'data', data_type: 'integer', source_name: 'loan', filter: '{{20}}' },
+  { heading: 'Loan Type', id: 'Type_Code', column_type: 'data', data_type: 'integer', source_name: 'loan', filter: '{{ 20 }}' },
   { heading: 'Payment',   id: 'Last_Payment',   column_type: 'data', data_type: 'currency', source_name: 'loan' },
   { heading: 'Maturity',  id: 'maturity_date',  column_type: 'data', data_type: 'date',     source_name: 'loan', filter: '< 2059-12-11' },
   { heading: 'Rate',      id: 'rate',           column_type: 'data', data_type: 'rate',     source_name: 'loan' },
@@ -172,6 +172,7 @@ function setupSourceFileInputs() {
         const reader = new FileReader();
         reader.onload = (e) => {
           parseCSVForSource(e.target.result, source);
+          console.log('*sheetData*', sheetData)
           pendingFileReads--;
           if (pendingFileReads === 0) {
             processAllCSV(source);
@@ -312,7 +313,21 @@ function recalcSheet(source) {
         if (match) {
           const funcName = match[1];
           const argsStr = match[2];
-          const args = argsStr.split(',').map(arg => arg.trim()).map(arg => parseFloat(row[arg]) || 0);
+          const args = argsStr.split(',')
+            .map(arg => arg.trim())
+            .map(arg => {
+              const value = row[arg];
+              // Check if the value is a string and contains common date delimiters
+              if (typeof value === 'string' && (value.includes('-') || value.includes('/'))) {
+                const date = new Date(value);
+                // If the date is valid, return the whole date string
+                if (!isNaN(date.getTime())) {
+                  return value;
+                }
+              }
+              // Otherwise, return the value parsed as a float (or 0 if not a number)
+              return parseFloat(value) || 0;
+            });
           if (window.functions && window.functions[funcName]) {
             try {
               args.push(source);
@@ -425,27 +440,50 @@ function getColumnFilters() {
 function createCondition(filterStr, dataType) {
   filterStr = filterStr.trim();
 
-  // 1. Handle double-curly syntax, e.g. "{{20}}"
-  if (filterStr.startsWith('{{') && filterStr.endsWith('}}')) {
-    const inner = filterStr.slice(2, -2).trim();
-    let cmpValue = inner;
-    // Attempt to parse as number if numeric
-    if (!isNaN(inner)) {
-      cmpValue = Number(inner);
-    } else if (
-      (inner.startsWith("'") && inner.endsWith("'")) ||
-      (inner.startsWith('"') && inner.endsWith('"'))
-    ) {
-      cmpValue = inner.slice(1, -1);
-    }
-    return value => value == cmpValue;
+  // 1) Check for leading '!' (negation)
+  let negate = false;
+  if (filterStr.startsWith('!')) {
+    negate = true;
+    filterStr = filterStr.slice(1).trim();  // remove the '!' and trim spaces
   }
-  
-  // 2. JSON array notation, e.g. "[20, 23, 25]"
+
+  // 2) If filter is wrapped in {{ }}, parse what's inside as a regular filter
+  let isDoubleCurly = false;
+  if (filterStr.startsWith('{{') && filterStr.endsWith('}}')) {
+    isDoubleCurly = true;
+    filterStr = filterStr.slice(2, -2).trim(); // remove {{ }}
+  }
+
+  // 3) Build the condition function for the (possibly unwrapped) filter string
+  const baseCondition = parseSingleFilter(filterStr, dataType);
+
+  // 4) If it was wrapped in {{ }}, you might want to treat it as “group-level,”
+  //    but for now we simply return the function as is. (Your code that organizes
+  //    groupFilters vs rowFilters can check if filter string started with {{ }}.)
+  // 5) If 'negate' was true, invert the result
+  if (negate) {
+    return value => !baseCondition(value);
+  } else {
+    return baseCondition;
+  }
+}
+
+/**
+ * parseSingleFilter(filterStr, dataType):
+ *   Returns a function(rowValue) -> boolean, handling:
+ *   - JSON array: e.g. "[20, 23]"
+ *   - Comparison operators: >, <, >=, <=, ==, !=
+ *   - Date logic if dataType === 'date'
+ *   - Fallback literal equality
+ */
+function parseSingleFilter(filterStr, dataType) {
+  filterStr = filterStr.trim();
+
+  // 1) JSON array notation: [20, 23, 25]
   if (filterStr.startsWith('[') && filterStr.endsWith(']')) {
     try {
       const allowed = JSON.parse(filterStr);
-      return rowValue => {
+      return function(rowValue) {
         // Attempt numeric comparison first
         const numericVal = Number(rowValue);
         if (!isNaN(numericVal)) {
@@ -459,13 +497,13 @@ function createCondition(filterStr, dataType) {
       return () => false;
     }
   }
-  
-  // 3. Comparison operators: support >, <, >=, <=, ==, !=
+
+  // 2) Comparison operators: >, <, >=, <=, ==, !=
   const match = filterStr.match(/^(>=|<=|>|<|==|!=)\s*(.+)$/);
   if (match) {
     const operator = match[1];
     let cmpValue = match[2].trim();
-    
+
     // Remove surrounding quotes if present
     if (
       (cmpValue.startsWith("'") && cmpValue.endsWith("'")) ||
@@ -473,14 +511,13 @@ function createCondition(filterStr, dataType) {
     ) {
       cmpValue = cmpValue.slice(1, -1);
     }
-    
+
     // Return a function that applies this comparison to each row value
-    return function(value) {
-      // If this column is a date column, try date comparisons first
+    return function(rowValue) {
+      // If this column is a date, try date comparisons first
       if (dataType === 'date') {
         const cmpDate = new Date(cmpValue);
-        const rowDate = new Date(value);
-        
+        const rowDate = new Date(rowValue);
         if (!isNaN(cmpDate.getTime()) && !isNaN(rowDate.getTime())) {
           // Both parsed as valid dates => compare as dates
           switch (operator) {
@@ -492,15 +529,15 @@ function createCondition(filterStr, dataType) {
             case '!=': return rowDate.getTime() !== cmpDate.getTime();
           }
         }
-        // If date parsing fails, fall back to numeric/string
+        // If date parsing fails, fall through to numeric/string
       }
       
       // Attempt numeric comparison
-      const numVal = Number(value);
+      const numVal = Number(rowValue);
       const cmpNum = Number(cmpValue);
-      const lhs = isNaN(numVal) ? value : numVal;
+      const lhs = isNaN(numVal) ? rowValue : numVal;
       const rhs = isNaN(cmpNum) ? cmpValue : cmpNum;
-      
+
       switch (operator) {
         case '>':  return lhs > rhs;
         case '<':  return lhs < rhs;
@@ -512,13 +549,13 @@ function createCondition(filterStr, dataType) {
       }
     };
   }
-  
-  // 4. Fallback: literal equality
+
+  // 3) Fallback: treat it as literal equality
   let literal = filterStr;
   if (!isNaN(literal)) {
     literal = Number(literal);
   }
-  return value => value == literal;
+  return rowValue => rowValue == literal;
 }
 
 /**
@@ -610,7 +647,6 @@ function applyGroupFilter(sheetData, columnsConfig) {
 }
 
 // ----- Testing the logic -----
-
 const columnsConfig2 = [
   { heading: 'Portfolio', id: 'portfolio', column_type: 'data', data_type: 'unique' },
   { heading: 'Principal', id: 'principal', column_type: 'data', data_type: 'currency', source_name: 'loan', filter: '> 100' },
@@ -701,8 +737,7 @@ function getRequiredSources(columnsConfig) {
   return [...new Set(sources)];
 }
 
-
-function groupRowsByUnique() {
+function groupRowsByUnique(inclusiveSet = false) {
   const uniqueCol = getUniqueColumn();
   const columnFilters = getColumnFilters();
   console.log('columnFilters', columnFilters)
@@ -713,7 +748,13 @@ function groupRowsByUnique() {
   }
   const groups = {};
 
-  const filteredRows = applyGroupFilter(sheetData, columnsConfig);
+  let filteredRows = applyGroupFilter(sheetData, columnsConfig);
+  if (inclusiveSet) {
+    filteredRows = uniquesIncludingEverySource(
+      filteredRows, 
+      columnsConfig
+    );
+  }
   console.log('filteredRows 2', filteredRows);
 
   filteredRows.forEach(row => {
@@ -841,7 +882,7 @@ function computeTotals(sheet) {
 // ----------------------------------------------------------------------
 // 10. Render Sheet
 // ----------------------------------------------------------------------
-function renderSheet() {
+function renderSheet(inclusiveSet = false) {
   const table = document.getElementById('spreadsheet');
   let html = '';
 
@@ -853,7 +894,7 @@ function renderSheet() {
   });
   html += '</tr></thead>';
 
-  const groupedRows = groupRowsByUnique();
+  const groupedRows = groupRowsByUnique(inclusiveSet);
   console.log('groupedRows', groupedRows)
   let rowNumber = 1;
 
