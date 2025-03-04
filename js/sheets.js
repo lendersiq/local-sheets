@@ -5,13 +5,13 @@
 //
 let columnsConfig = [
   { heading: 'Portfolio', id: 'Portfolio', column_type: 'data', data_type: 'unique'},
-  { heading: 'Principal', id: 'principal', column_type: 'data', data_type: 'currency', source_name: 'loan' },
+  { heading: 'Principal', id: 'Principal', column_type: 'data', data_type: 'currency', source_name: 'loan' },
   { heading: 'Loan Type', id: 'Type_Code', column_type: 'data', data_type: 'integer', source_name: 'loan', filter: '{{ 20 }}' },
   { heading: 'Payment',   id: 'Last_Payment',   column_type: 'data', data_type: 'currency', source_name: 'loan' },
   { heading: 'Maturity',  id: 'maturity_date',  column_type: 'data', data_type: 'date',     source_name: 'loan', filter: '< 2059-12-11' },
   { heading: 'Rate',      id: 'rate',           column_type: 'data', data_type: 'rate',     source_name: 'loan' },
   { heading: 'Balance',   id: 'average_balance', column_type: 'data', data_type: 'currency', source_name: 'checking' },
-  { heading: 'Average',   id: 'averageBalance', column_type: 'function', function: 'averageBalance(principal, Last_Payment, rate, maturity_date)', data_type: 'currency' },
+  { heading: 'Average',   id: 'averageBalance', column_type: 'function', function: 'averageBalance(Principal, Last_Payment, rate, maturity_date)', data_type: 'currency' },
   { heading: 'Commission',id: 'commission',     column_type: 'formula',  formula: 'averageBalance * 0.1', data_type: 'currency' }
 ];
 
@@ -206,7 +206,7 @@ function parseCSVForSource(text, source) {
 // After all files loaded, map columns, recalc, render
 function processAllCSV(source_name) {
   const sources = [...new Set(sheetData.map(r => r.__source))];
-  sources.forEach(s => mapColumnsForSource(s));
+  sources.forEach(src => mapColumnsForSource(src));
   window.statistics = window.statistics || {};
   window.statistics[source_name] = computeStatistics(sheetData);
   console.log ('window.statistics', window.statistics)
@@ -326,9 +326,9 @@ function recalcSheet(source) {
                 }
               }
               // Otherwise, return the value parsed as a float (or 0 if not a number)
-              return parseFloat(value) || 0;
+              return parseFloat(value) || null;  // || 0
             });
-          if (window.functions && window.functions[funcName]) {
+          if (window.functions && window.functions[funcName] && !args.every(arg => arg === null)) {
             try {
               args.push(source);
               row[col.id] = window.functions[funcName].implementation(...args);
@@ -338,7 +338,7 @@ function recalcSheet(source) {
             }
           } else {
             row[col.id] = null;
-            errorDisplay.innerHTML += `<div class="error">Row ${rowIndex + 1}: Function "${funcName}" not found.</div>`;
+            //errorDisplay.innerHTML += `<div class="error">Row ${rowIndex + 1}: Function "${funcName}" not found.</div>`;
           }
         }
       }
@@ -890,24 +890,36 @@ function renderSheet(inclusiveSet = false) {
   html += '<thead><tr><th>Row</th>';
   columnsConfig.forEach(col => {
     html += `<th>${col.heading}</th>`;
-    if (col.filter) console.log ('filter', col.filter, col.id)
+    if (col.filter) console.log('filter', col.filter, col.id);
   });
   html += '</tr></thead>';
 
   const groupedRows = groupRowsByUnique(inclusiveSet);
-  console.log('groupedRows', groupedRows)
+  console.log('groupedRows', groupedRows);
   let rowNumber = 1;
 
   groupedRows.forEach((g, idx) => {
     const hasSub = g.subRows && g.subRows.length > 0;
     html += `<tr class="combined-row ${hasSub ? 'accordion':''}" data-index="${idx}">`;
     html += `<td>${rowNumber++}</td>`;
+
     columnsConfig.forEach(col => {
-      const rawVal = (g.combined[col.id] !== undefined) ? g.combined[col.id] : '';
+      let rawVal = (g.combined[col.id] !== undefined) ? g.combined[col.id] : '';
+
+      // ====> NEW CHECK FOR SOURCE <====
+      // If this column is tied to 'loan' but the group-level row has a different source,
+      // then render an empty cell. (If your group logic merges multiple rows' sources,
+      // you may want a different approach, but this is the simplest.)
+      const rowSource = g.combined['__source'];
+      if (col.source_name && rowSource && col.source_name !== rowSource) {
+        rawVal = ''; // blank out if mismatch
+      }
+      
       html += `<td>${formatValue(rawVal, col.data_type)}</td>`;
     });
     html += '</tr>';
 
+    // Sub-rows
     if (hasSub) {
       html += `<tr class="sub-rows" data-parent-index="${idx}" style="display:none;"><td colspan="${columnsConfig.length+1}">`;
       html += '<table class="sub-table">';
@@ -916,16 +928,26 @@ function renderSheet(inclusiveSet = false) {
         html += `<th>${col.heading}</th>`;
       });
       html += '</tr>';
+      
       let subNumber = 1;
       g.subRows.forEach(row => {
         html += '<tr>';
         html += `<td>${rowNumber-1}.${subNumber++}</td>`;
+        
         columnsConfig.forEach(col => {
-          const rawVal = (row[col.id] !== undefined) ? row[col.id] : '';
+          let rawVal = (row[col.id] !== undefined) ? row[col.id] : '';
+
+          // ====> SAME CHECK IN SUB-ROWS <====
+          // If column source_name is 'loan' but row.__source is not 'loan', blank out
+          if (col.source_name && row.__source && col.source_name !== row.__source) {
+            rawVal = '';
+          }
+
           html += `<td>${formatValue(rawVal, col.data_type)}</td>`;
         });
         html += '</tr>';
       });
+      
       html += '</table></td></tr>';
     }
   });
@@ -939,17 +961,18 @@ function renderSheet(inclusiveSet = false) {
   });
   html += '</tr>';
 
-  table.innerHTML=html;
+  table.innerHTML = html;
 
   // Accordion toggles
   document.querySelectorAll('.combined-row.accordion').forEach(row => {
     row.addEventListener('click', () => {
-      const idx=row.getAttribute('data-index');
-      const sub=document.querySelector(`.sub-rows[data-parent-index="${idx}"]`);
-      sub.style.display=(sub.style.display==='none')?'table-row':'none';
+      const idx = row.getAttribute('data-index');
+      const sub = document.querySelector(`.sub-rows[data-parent-index="${idx}"]`);
+      sub.style.display = (sub.style.display === 'none') ? 'table-row' : 'none';
     });
   });
 }
+
 
 // ----------------------------------------------------------------------
 // 11. "New Sheet" & "Edit Sheet" Modal logic
